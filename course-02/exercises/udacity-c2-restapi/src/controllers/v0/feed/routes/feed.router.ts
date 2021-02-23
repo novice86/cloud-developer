@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { FeedItem } from '../models/FeedItem';
 import { requireAuth } from '../../users/routes/auth.router';
 import * as AWS from '../../../../aws';
+import { sequelize } from '../../../../sequelize';
 
 const router: Router = Router();
 
@@ -18,30 +19,63 @@ router.get('/', async (req: Request, res: Response) => {
 
 //@TODO
 //Add an endpoint to GET a specific resource by Primary Key
+router.get('/:id', async (req: Request, res: Response) => {
+    let { id } = req.params
+
+    if ( !id ){
+        return res.status(400).send('id is required')
+    }
+
+    await FeedItem.findByPk(id).then((feeditem) => {
+        if ( !feeditem) {
+            return res.status(404).send('item is not found')
+        }
+        return res.send(feeditem.get({ plain: true}))
+    });
+
+});
 
 // update a specific resource
-router.patch('/:id', 
-    requireAuth, 
+router.patch('/:id',
+    requireAuth,
     async (req: Request, res: Response) => {
         //@TODO try it yourself
-        res.send(500).send("not implemented")
+        let { id } = req.params
+        const { caption, value } = req.body
+
+        if (!id) {
+            return res.status(400).send(`id, param, value are required`);
+        }
+
+        await FeedItem.findByPk(id).then((feeditem) => {
+            if ( !feeditem) {
+                return res.status(404).send('item is not found')
+            }
+
+            feeditem.update(req.body,
+                {where: {id: id} }
+            )
+            .then(function(updatedrow){
+                return res.status(200).send(updatedrow)
+            })
+        });
 });
 
 
 // Get a signed url to put a new item in the bucket
-router.get('/signed-url/:fileName', 
-    requireAuth, 
+router.get('/signed-url/:fileName',
+    requireAuth,
     async (req: Request, res: Response) => {
     let { fileName } = req.params;
     const url = AWS.getPutSignedUrl(fileName);
     res.status(201).send({url: url});
 });
 
-// Post meta data and the filename after a file is uploaded 
+// Post meta data and the filename after a file is uploaded
 // NOTE the file name is they key name in the s3 bucket.
 // body : {caption: string, fileName: string};
-router.post('/', 
-    requireAuth, 
+router.post('/',
+    requireAuth,
     async (req: Request, res: Response) => {
     const caption = req.body.caption;
     const fileName = req.body.url;
